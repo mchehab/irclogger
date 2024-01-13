@@ -10,7 +10,6 @@ import sys
 import os.path
 import os
 import re
-import warnings
 from ircAsync import SPC, CR, LF, CRLF, RPL_WELCOME
 from ircAsync import NICK, JOIN, PART, INVITE, QUIT
 from ircAsync import PRIVMSG, NOTICE, PING, PONG, USER
@@ -82,10 +81,6 @@ _loopDelay = 30.0
 # =============================================================================
 
 
-# For now, ignore FutureWarning
-warnings.simplefilter(action='ignore', category=FutureWarning)
-
-
 def ctcp(s): return '\x01%s\x01' % s
 def me(s): return ctcp('ACTION %s' % s)
 
@@ -98,9 +93,10 @@ channels = []  # channels that this bot's on
 global directories, commandRe, nicknameRe, offRe, onRe
 directories = []
 
-offRe = re.compile(" *(off|quit|stop|exit)", re.I)
-onRe = re.compile(" *(log|go|on|start) +((#?[^ ]+)( *([^ ]+))?)", re.I)
-offPrefix = re.compile("^[^ ]+ [[]off[]]", re.I)
+offRe = re.compile(r"\s*(off|quit|stop|exit)", re.I)
+onRe = re.compile(r"\s*(log|go|on|start) +((#?[^ ]+)( *([^ ]+))?)", re.I)
+versionRe = re.compile(r"\s*version\s*", re.I)
+offPrefix = re.compile(r"^[^ ]+ \[off\]", re.I)
 
 # -----------------------------------------------------------------------------
 
@@ -159,20 +155,29 @@ def globalsubstitute(input_string, from_string, to_string):
 
 
 def interpretMsg(m, origin, args, text, c):
-    on = re.match(onRe, text)
+    if versionRe.match(text):
+        return
+
+    on = onRe.match(text)
+
+    print(f"interpretMsg: {on} check {onRe} from {origin} {args} '{text}'")
+
     if on:  # we are told to join a channel
         help = _logAck.replace('LOGGER', NickName) % on.group(3)
         for line in help.split('\n'):
             c.todo([PRIVMSG, origin, ":", line])
         newchan = on.group(2)
-        if re.match("[^#]", newchan):
+        if re.match(r"[^#]", newchan):
             newchan = "#" + newchan
         c.todo([JOIN, newchan])
-    else:
-        help = _help.replace('LOGGER', NickName)
-        help = help.replace('LOGSURL', _url)
-        for line in help.split('\n'):
-            c.todo([PRIVMSG, origin, ":", line])
+
+# FIXME: the helper message are currently be sent to the server
+
+#    else:
+#        help = _help.replace('LOGGER', NickName)
+#        help = help.replace('LOGSURL', _url)
+#        for line in help.split('\n'):
+#            c.todo([PRIVMSG, origin, ":", line])
 
 
 def logOnMsg(channel, c):
@@ -190,7 +195,7 @@ def logOffMsg(channel, c):
 
 
 def channelCommand(channel, command, c):
-    if re.match(offRe, command):
+    if offRe.match(command):
         partChannel(channel, c)
 
 
@@ -241,18 +246,18 @@ def main(hostName, port, chan):
 
     def hi(m, origin, args, text, c=c):
         c.tell(args[1], 'hi, %s' % origin.split('!')[0])
-    c.bind(hi, PRIVMSG, r"(?i)^(Hi|Hey|welcome)(,)? %s(\!)?$" % NickName)
+    c.bind(hi, PRIVMSG, r"(?i)^(Hi|Hey|welcome)(,)? %s(\!)?$" % NickNameQ)
 
     def logText(m, origin, args, text, c=c):
         channel = args[1]
         nick = origin
         if '!' in origin:
             nick = origin.split('!')[0]
-        if re.match(nicknameRe, channel):
+        if nicknameRe.match(channel):
             interpretMsg(m, nick, args, text, c)
             return
         else:
-            mo = re.match(commandRe, text)
+            mo = commandRe.match(text)
             if mo:
                 channelCommand(channel, mo.group(1), c)
         if not (text.startswith('\x01ACTION ') and text.endswith('\x01')):
@@ -260,7 +265,7 @@ def main(hostName, port, chan):
         else:
             text = _action % (nick, text[8:-1])
         try:
-            if not re.match(offPrefix, text):
+            if not offPrefix.match(text):
                 log(channel, text)
         except ValueError:
             log(channel, text)
@@ -413,8 +418,21 @@ signal.signal(signal.SIGINT, exit_handler)
 
 if __name__ == '__main__':
     if len(sys.argv) > 4:
-        server, NickName, _logsdir, _url, chans = sys.argv[
-            1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
+
+        args = sys.argv[1:]
+
+        server = sys.argv[1]
+        NickName = sys.argv[2]
+        _logsdir = sys.argv[3]
+        _url = sys.argv[4]
+
+        chans = []
+        for arg in sys.argv[5:]:
+            ch = arg.split(" ");
+            for c in ch:
+                if not c.startswith('#'):
+                    c = "#" + c
+                chans.append(c)
 
         if server == '.':
             server = 'localhost'
@@ -425,16 +443,16 @@ if __name__ == '__main__':
         if _url == '.':
             _url = _urlDef
 
-        chans = [('#%s' % c, c)[c.startswith('#')] for c in chans]
+        print(f"channels: {chans}")
         if ':' in server:
             server, port = server.split(':')
         else:
             port = '6667'
 
         # NickNameQ is the re-quoted form of NickName for comparisons
-        NickNameQ = re.sub("([][*+])", '[\\1]', NickName)
+        NickNameQ = re.escape(NickName)
         nicknameRe = re.compile(NickNameQ, re.I)
-        commandRe = re.compile(NickNameQ + '[,:]? *(.*)', re.I)
+        commandRe = re.compile(NickNameQ + r'[,:]? *(.*)', re.I)
         main(server, int(port), chans)
     else:
         print(sys.argv)

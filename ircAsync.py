@@ -79,7 +79,7 @@ class T(asynchat.async_chat):
 
     def makeConn(self, host, port):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        # debug("connecting to...", host, port)
+        debug("connecting to...", host, port)
         self.passwd = os.getenv('IRC_SERVER_PASSWORD')
         self.connect((host, port))
 
@@ -90,13 +90,13 @@ class T(asynchat.async_chat):
         if text:
             command = command + ' :' + " ".join(text)
 
+        debug("sending command:", command)
         command += CRLF
         self.push(command.encode('utf-8'))
-        # debug("sent/pushed command:", command)
 
     # asyncore methods
     def handle_connect(self):
-        # debug("connected")
+        debug("connected")
 
         # @@ hmm... RFC says mode is a bitfield, but
         # irc.py by @@whathisname says +iw string.
@@ -106,7 +106,7 @@ class T(asynchat.async_chat):
         self.todo([USER, self.userid, "+iw", self.nick], self.fullName)
 
     def handle_close(self):
-        # debug('socket closed')
+        debug('socket closed')
         self.close()
 
     # asynchat methods
@@ -114,7 +114,7 @@ class T(asynchat.async_chat):
         self.bufIn = self.bufIn + bytes.decode('utf-8')
 
     def found_terminator(self):
-        # debug("found terminator", self.bufIn)
+        # debug("received:", self.bufIn)
         line = self.bufIn
         self.bufIn = ''
 
@@ -128,9 +128,10 @@ class T(asynchat.async_chat):
         except ValueError:
             args = line
             text = ''
+
         args = args.split(" ")
 
-        # debug("from::", origin, "|message::", args, "|text::", text)
+        debug("from", origin, "message:", args, "text:", text)
 
         self.rxdMsg(args, text, origin)
 
@@ -157,13 +158,15 @@ class T(asynchat.async_chat):
             self.todo([PONG, text])
 
         for cmd, pat, thunk in self._dispatch:
+            #debug(f'check if "{cmd}"=="{args[0]}" PAT:{pat} on "{args}"')
             if args[0] == cmd:
                 if pat:
-                    # debug('dispatching on...', pat)
+                    debug(f'dispatching on {pat} for command {args}, text {text} ... {thunk}')
                     m = pat.search(text)
                     if m:
                         thunk(m, origin, args, text)
                 else:
+                    debug(f'dispatching command {args}, text {text} ... {thunk}')
                     thunk(None, origin, args, text)
 
     def startChannels(self, chans):
@@ -171,6 +174,7 @@ class T(asynchat.async_chat):
         self.bind(self._welcomeJoin, RPL_WELCOME)
 
     def _welcomeJoin(self, m, origin, args, text):
+        debug(f"todo: add JOIN {self._startChannels}")
         for chan in self._startChannels:
             self.todo(['JOIN', chan])
 
