@@ -59,7 +59,7 @@ class T(asynchat.async_chat):
     def __init__(self):
         asynchat.async_chat.__init__(self)
         self.bufIn = ''
-        self.set_terminator(CRLF)
+        self.set_terminator(CRLF.encode('utf-8'))
 
         # public attributes
         # no blanks in nick.
@@ -87,7 +87,9 @@ class T(asynchat.async_chat):
         command = " ".join(args)
         if text: command = command + ' :' + " ".join(text)
 
-        self.push(command + CRLF)
+        command += CRLF
+        self.push(command.encode('utf-8'))
+
         debug("sent/pushed command:", command)
 
     # asyncore methods
@@ -106,11 +108,11 @@ class T(asynchat.async_chat):
 
     # asynchat methods
     def collect_incoming_data(self, bytes):
-        self.bufIn = self.bufIn + bytes
+        self.bufIn = self.bufIn + bytes.decode('utf-8')
 
     def found_terminator(self):
         #debug("found terminator", self.bufIn)
-        line = self.bufIn.decode('utf-8')
+        line = self.bufIn
         self.bufIn = ''
 
         if line[0] == ':':
