@@ -110,7 +110,7 @@ class T(asynchat.async_chat):
 
     def found_terminator(self):
         #debug("found terminator", self.bufIn)
-        line = self.bufIn
+        line = self.bufIn.decode('utf-8')
         self.bufIn = ''
 
         if line[0] == ':':
