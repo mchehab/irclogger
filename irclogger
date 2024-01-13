@@ -1,9 +1,28 @@
 #!/usr/bin/env python3
+import asyncore
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import socket
+import base64
+import sys
+import os.path
+import os
+import re
+import warnings
+from ircAsync import SPC, CR, LF, CRLF, RPL_WELCOME
+from ircAsync import NICK, JOIN, PART, INVITE, QUIT
+from ircAsync import PRIVMSG, NOTICE, PING, PONG, USER
+from re import match
+import signal
+from ircAsync import debug
+import ircAsync
 VERSION = """IRC Logger python bot v1.17, http://colas.nahaboo.net/Software/IrcLogger"""
 # irclogger server nickname logsdir url [start_channels...]
 #           if args are "." they are replaced by default values
 
-#=============================================================================
+# =============================================================================
 # Main config stuff
 
 NickNameDef = '[LOGGER]'
@@ -39,9 +58,9 @@ _on = """| Starting logging this channel %s - See logs at %s - Lines beginning w
 _off = """| Stopping logging this channel %s - See logs at %s - You can re-enable log by inviting me back, e.g: /INVITE LOGGER - or telling me in a private message: LOG #CHANNEL [KEY]"""
 _logAck = """Ok, joining channel %s to log it."""
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # no need to modify below
-TimeStamp = 1 # 1 for yes, 0 for no
+TimeStamp = 1  # 1 for yes, 0 for no
 _text = "<%s> %s"
 _action = "* %s %s"
 _join = "*** %s has joined %s"
@@ -60,30 +79,21 @@ _pingDelay = 60
 _loopDelay = 30.0
 
 # End of main config stuff
-#=============================================================================
+# =============================================================================
 
-
-import ircAsync
-from ircAsync import debug
-import signal
-import re, os, os.path, sys, base64, socket, urllib.request, urllib.parse, urllib.error, time, asyncore
-from re import match
-
-from ircAsync import PRIVMSG, NOTICE, PING, PONG, USER
-from ircAsync import NICK, JOIN, PART, INVITE, QUIT
-from ircAsync import SPC, CR, LF, CRLF, RPL_WELCOME
 
 # For now, ignore FutureWarning
-import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 def ctcp(s): return '\x01%s\x01' % s
 def me(s): return ctcp('ACTION %s' % s)
 
+
 global people
 people = {}
 global channels
-channels = [] # channels that this bot's on
+channels = []  # channels that this bot's on
 
 global directories, commandRe, nicknameRe, offRe, onRe
 directories = []
@@ -92,286 +102,340 @@ offRe = re.compile(" *(off|quit|stop|exit)", re.I)
 onRe = re.compile(" *(log|go|on|start) +((#?[^ ]+)( *([^ ]+))?)", re.I)
 offPrefix = re.compile("^[^ ]+ [[]off[]]", re.I)
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
 
 def log(channelname, text):
-   fn = time.strftime(_logfilename, time.gmtime(time.time()))
-   # some bogus server messages may end with bot name as channel, ignore
-   if channelname == NickName:
-      print("bogus line: channelname=" +  channelname + ", text=" + text, file=sys.stderr)
-      return
-   # channel empty? ignore
-   if channelname == '':
-      print("bogus line: channel name empty, text=" + text, file=sys.stderr)
-      return
-   # channels are #-prefixed, but we store in dirs without the prefix
-   channel = channelname.lower()
-   if channel not in directories:
-      print("joining channel: " + channel)
-      # if it fails, the exception may as well be raised
-      os.mkdir(os.path.join(_logsdir, channel[1:]))
-      directories.append(channel)
-   if TimeStamp:
-      t = time.strftime('[%H:%M]', time.gmtime(time.time()))
-      text = t + ' ' + text
-   text += '\n'
-   open(os.path.join(_logsdir, channel[1:], fn), 'a').write(text)
+    fn = time.strftime(_logfilename, time.gmtime(time.time()))
+    # some bogus server messages may end with bot name as channel, ignore
+    if channelname == NickName:
+        print("bogus line: channelname=" + channelname +
+              ", text=" + text, file=sys.stderr)
+        return
+    # channel empty? ignore
+    if channelname == '':
+        print("bogus line: channel name empty, text=" + text, file=sys.stderr)
+        return
+    # channels are #-prefixed, but we store in dirs without the prefix
+    channel = channelname.lower()
+    if channel not in directories:
+        print("joining channel: " + channel)
+        # if it fails, the exception may as well be raised
+        os.mkdir(os.path.join(_logsdir, channel[1:]))
+        directories.append(channel)
+    if TimeStamp:
+        t = time.strftime('[%H:%M]', time.gmtime(time.time()))
+        text = t + ' ' + text
+    text += '\n'
+    open(os.path.join(_logsdir, channel[1:], fn), 'a').write(text)
 
 # must be called after each change to var channels
+
+
 def logChannels():
-   if len(channels) > 0:
-     channelslist = reduce(spaceConcat, list(map(trimSharp, channels))).lower()
-   else:
-     channelslist = ''
-   open(os.path.join(_logsdir, _logchannels), 'w').write(channelslist)
+    if len(channels) > 0:
+        channelslist = reduce(spaceConcat, list(
+            map(trimSharp, channels))).lower()
+    else:
+        channelslist = ''
+    open(os.path.join(_logsdir, _logchannels), 'w').write(channelslist)
+
 
 def allowedChannel(channel):
-   try:
-      allowed = open(_channelsallow, 'r')
-      if channel not in allowed.read().split(' '):
-         return 0
-      else: return 1
-   except IOError: pass
-   return 0
+    try:
+        allowed = open(_channelsallow, 'r')
+        if channel not in allowed.read().split(' '):
+            return 0
+        else:
+            return 1
+    except IOError:
+        pass
+    return 0
 
-def globalsubstitute(input_string,from_string,to_string):
-   splitlist = input_string.splitfields(from_string)
-   return splitlist.joinfields(to_string)
+
+def globalsubstitute(input_string, from_string, to_string):
+    splitlist = input_string.splitfields(from_string)
+    return splitlist.joinfields(to_string)
+
 
 def interpretMsg(m, origin, args, text, c):
-   on = re.match(onRe, text)
-   if on: # we are told to join a channel
-      help = _logAck.replace('LOGGER', NickName) % on.group(3)
-      for line in help.split('\n'):
-         c.todo([PRIVMSG, origin, ":", line])
-      newchan = on.group(2)
-      if re.match("[^#]", newchan): newchan = "#" + newchan
-      c.todo([JOIN, newchan])
-   else:
-      help = _help.replace('LOGGER', NickName)
-      help = help.replace('LOGSURL', _url)
-      for line in help.split('\n'):
-         c.todo([PRIVMSG, origin, ":", line])
+    on = re.match(onRe, text)
+    if on:  # we are told to join a channel
+        help = _logAck.replace('LOGGER', NickName) % on.group(3)
+        for line in help.split('\n'):
+            c.todo([PRIVMSG, origin, ":", line])
+        newchan = on.group(2)
+        if re.match("[^#]", newchan):
+            newchan = "#" + newchan
+        c.todo([JOIN, newchan])
+    else:
+        help = _help.replace('LOGGER', NickName)
+        help = help.replace('LOGSURL', _url)
+        for line in help.split('\n'):
+            c.todo([PRIVMSG, origin, ":", line])
+
 
 def logOnMsg(channel, c):
-   on = _on % (channel, _url)
-   on = on.replace('LOGGER', NickName)
-   for line in on.split('\n'):
-      c.todo([PRIVMSG, channel, ":", line])
+    on = _on % (channel, _url)
+    on = on.replace('LOGGER', NickName)
+    for line in on.split('\n'):
+        c.todo([PRIVMSG, channel, ":", line])
+
 
 def logOffMsg(channel, c):
-   off = _off % (channel, _url)
-   off = off.replace('LOGGER', NickName)
-   for line in off.split('\n'):
-      c.todo([PRIVMSG, channel, ":", line])
+    off = _off % (channel, _url)
+    off = off.replace('LOGGER', NickName)
+    for line in off.split('\n'):
+        c.todo([PRIVMSG, channel, ":", line])
+
 
 def channelCommand(channel, command, c):
-   if re.match(offRe, command):
-      partChannel(channel, c)
+    if re.match(offRe, command):
+        partChannel(channel, c)
+
 
 def partChannel(channel, c):
-   logOffMsg(channel, c)
-   c.todo([PART, channel])
+    logOffMsg(channel, c)
+    c.todo([PART, channel])
+
 
 def tick(c):
-   if time.time() > (c.lastTickTime + _pingDelay):
-      c.lastTickTime = time.time()
-      c.todo([PING, NickName])
+    if time.time() > (c.lastTickTime + _pingDelay):
+        c.lastTickTime = time.time()
+        c.todo([PING, NickName])
 
 # we redefine here asyncore's loop to fire a timer on tick
-def loop (c):
-    map=asyncore.socket_map
+
+
+def loop(c):
+    map = asyncore.socket_map
     while map:
-        asyncore.poll (_loopDelay, map)
+        asyncore.poll(_loopDelay, map)
         tick(c)
+
 
 def exit_handler(signal, frame):
     t = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time()))
     for channel in channels:
-       log(channel, _session % (NickName, 'stops', channel, t))
+        log(channel, _session % (NickName, 'stops', channel, t))
     sys.exit(0)
 
+
 def spaceConcat(string1, string2):
-   return string1 + ' ' + string2
+    return string1 + ' ' + string2
+
+
 def trimSharp(string): return string[1:]
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+
 def main(hostName, port, chan):
-   c = ircAsync.T()
-   c.startChannels(chan)
-   c.nick = NickName
-   c.userid = 'logger'
-   c.lastTickTime = time.time()
+    c = ircAsync.T()
+    c.startChannels(chan)
+    c.nick = NickName
+    c.userid = 'logger'
+    c.lastTickTime = time.time()
 
-   # Put any new functions here
+    # Put any new functions here
 
-   def hi(m, origin, args, text, c=c):
-      c.tell(args[1], 'hi, %s' % origin.split('!')[0])
-   c.bind(hi, PRIVMSG, r"(?i)^(Hi|Hey|welcome)(,)? %s(\!)?$" % NickName)
+    def hi(m, origin, args, text, c=c):
+        c.tell(args[1], 'hi, %s' % origin.split('!')[0])
+    c.bind(hi, PRIVMSG, r"(?i)^(Hi|Hey|welcome)(,)? %s(\!)?$" % NickName)
 
-   def logText(m, origin, args, text, c=c):
-      channel = args[1]
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      if re.match(nicknameRe, channel):
-         interpretMsg(m, nick, args, text, c)
-         return
-      else:
-         mo = re.match(commandRe, text)
-         if mo: channelCommand(channel, mo.group(1), c)
-      if not (text.startswith('\x01ACTION ') and text.endswith('\x01')):
-         text = _text % (nick, text)
-      else: text = _action % (nick, text[8:-1])
-      try:
-         if not re.match(offPrefix, text):
-            log(channel, text)
-      except ValueError: log(channel, text)
-   c.bind(logText, PRIVMSG, r"(.*)")
-
-   def logTopic(m, origin, args, text, c=c):
-      channel = args[1]
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      topic = _topic % (nick, text)
-      log(channel, topic)
-   c.bind(logTopic, 'TOPIC', r"(.*)")
-
-   def logMode(m, origin, args, text, c=c):
-      channel = args[1]
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      mode = _mode % (nick, ' '.join(args[2:]))
-      log(channel, mode)
-   c.bind(logMode, 'MODE', r"(.*)")
-
-   def logJoin(m, origin, args, text, c=c):
-      channel = text
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-
-      if nick == NickName:
-         if channel not in channels:
-            if allowedChannel(channel):
-               channels.append(channel)
-               logChannels()
-         t = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time()))
-         log(channel, _session % (NickName, 'starts', channel, t))
-         logOnMsg(channel, c)
-
-      join = _join % (nick, channel)
-      log(channel, join)
-      if nick in people:
-         if channel not in people[nick]:
-            people[nick].append(channel)
-      else: people[nick] = [channel]
-   c.bind(logJoin, 'JOIN', r"(.*)")
-
-   def logNames(m, origin, args, text, c=c):
-      channel = args[3]
-      raw_nicks = text.split(' ')
-      for nick in raw_nicks:
-         if nick.startswith('@') or nick.startswith('+'):
-            nick = nick[1:]
-         if nick in people:
-            if channel not in people[nick]:
-               people[nick].append(channel)
-         else: people[nick] = [channel]
-   c.bind(logNames, '353', r"(.*)")
-
-   def logPart(m, origin, args, text, c=c):
-      if len(args) > 1:
+    def logText(m, origin, args, text, c=c):
         channel = args[1]
-      else:
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        if re.match(nicknameRe, channel):
+            interpretMsg(m, nick, args, text, c)
+            return
+        else:
+            mo = re.match(commandRe, text)
+            if mo:
+                channelCommand(channel, mo.group(1), c)
+        if not (text.startswith('\x01ACTION ') and text.endswith('\x01')):
+            text = _text % (nick, text)
+        else:
+            text = _action % (nick, text[8:-1])
+        try:
+            if not re.match(offPrefix, text):
+                log(channel, text)
+        except ValueError:
+            log(channel, text)
+    c.bind(logText, PRIVMSG, r"(.*)")
+
+    def logTopic(m, origin, args, text, c=c):
+        channel = args[1]
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        topic = _topic % (nick, text)
+        log(channel, topic)
+    c.bind(logTopic, 'TOPIC', r"(.*)")
+
+    def logMode(m, origin, args, text, c=c):
+        channel = args[1]
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        mode = _mode % (nick, ' '.join(args[2:]))
+        log(channel, mode)
+    c.bind(logMode, 'MODE', r"(.*)")
+
+    def logJoin(m, origin, args, text, c=c):
         channel = text
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      part = _part % (nick, text)
-      log(channel, part)
-      if nick == NickName:
-         if channel in channels:
-            channels.remove(channel)
-            logChannels()
-      try: people[nick].remove(channel)
-      except:
-         print("Something messed up, but it doesn't matter, for ", nick, " parting from ", channel, file=sys.stderr)
-   c.bind(logPart, 'PART', r"(.*)")
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
 
-   def logQuit(m, origin, args, text, c=c):
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      quit = _quit % (nick, text)
-      if nick in people:
-         for channel in people[nick]: log(channel, quit)
-         del people[nick]
-   c.bind(logQuit, 'QUIT', r"(.*)")
+        if nick == NickName:
+            if channel not in channels:
+                if allowedChannel(channel):
+                    channels.append(channel)
+                    logChannels()
+            t = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time()))
+            log(channel, _session % (NickName, 'starts', channel, t))
+            logOnMsg(channel, c)
 
-   def logKick(m, origin, args, text, c=c):
-      channel = args[1]
-      nick = origin
-      if '!' in origin: nick = origin.split('!')[0]
-      kickee = args[2]
-      kick = _kick % (kickee, nick, text)
-      log(channel, kick)
-      if kickee == NickName:
-         if channel in channels:
-            channels.remove(channel)
-            logChannels()
-      try: people[kickee].remove(channel)
-      except:
-         print("Something messed up, but it doesn't matter, for ", kickee, " kicked from ", channel, file=sys.stderr)
-   c.bind(logKick, 'KICK', r"(.*)")
+        join = _join % (nick, channel)
+        log(channel, join)
+        if nick in people:
+            if channel not in people[nick]:
+                people[nick].append(channel)
+        else:
+            people[nick] = [channel]
+    c.bind(logJoin, 'JOIN', r"(.*)")
 
-   def logNick(m, origin, args, text, c=c):
-      old = origin
-      if '!' in origin: old = origin.split('!')[0]
-      new = text
-      nick = _nick % (old, new)
-      if old in people:
-         for channel in people[old]: log(channel, nick)
-         people[new] = people[old]
-         del people[old]
-   c.bind(logNick, 'NICK', r"(.*)")
+    def logNames(m, origin, args, text, c=c):
+        channel = args[3]
+        raw_nicks = text.split(' ')
+        for nick in raw_nicks:
+            if nick.startswith('@') or nick.startswith('+'):
+                nick = nick[1:]
+            if nick in people:
+                if channel not in people[nick]:
+                    people[nick].append(channel)
+            else:
+                people[nick] = [channel]
+    c.bind(logNames, '353', r"(.*)")
 
-   def logInvite(m, origin, args, text, c=c):
-      c.todo([JOIN, text])
-   c.bind(logInvite, 'INVITE', r"(.*)")
+    def logPart(m, origin, args, text, c=c):
+        if len(args) > 1:
+            channel = args[1]
+        else:
+            channel = text
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        part = _part % (nick, text)
+        log(channel, part)
+        if nick == NickName:
+            if channel in channels:
+                channels.remove(channel)
+                logChannels()
+        try:
+            people[nick].remove(channel)
+        except:
+            print("Something messed up, but it doesn't matter, for ",
+                  nick, " parting from ", channel, file=sys.stderr)
+    c.bind(logPart, 'PART', r"(.*)")
 
-   # inits
-   if not os.access(_logsdir, os.W_OK): os.makedirs(_logsdir)
-   for entry in os.listdir(_logsdir):
-      if os.path.isdir(os.path.join(_logsdir, entry)):
-         lentry = entry.lower()
-         if lentry == entry:  # ignore non-lowercase dirs
-            if lentry not in directories:
-               directories.append('#' + lentry)
+    def logQuit(m, origin, args, text, c=c):
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        quit = _quit % (nick, text)
+        if nick in people:
+            for channel in people[nick]:
+                log(channel, quit)
+            del people[nick]
+    c.bind(logQuit, 'QUIT', r"(.*)")
 
-   c.makeConn(hostName, port)
-   try: loop(c)
-   except:
-      exit_handler(signal.SIGHUP, 0)
+    def logKick(m, origin, args, text, c=c):
+        channel = args[1]
+        nick = origin
+        if '!' in origin:
+            nick = origin.split('!')[0]
+        kickee = args[2]
+        kick = _kick % (kickee, nick, text)
+        log(channel, kick)
+        if kickee == NickName:
+            if channel in channels:
+                channels.remove(channel)
+                logChannels()
+        try:
+            people[kickee].remove(channel)
+        except:
+            print("Something messed up, but it doesn't matter, for ",
+                  kickee, " kicked from ", channel, file=sys.stderr)
+    c.bind(logKick, 'KICK', r"(.*)")
+
+    def logNick(m, origin, args, text, c=c):
+        old = origin
+        if '!' in origin:
+            old = origin.split('!')[0]
+        new = text
+        nick = _nick % (old, new)
+        if old in people:
+            for channel in people[old]:
+                log(channel, nick)
+            people[new] = people[old]
+            del people[old]
+    c.bind(logNick, 'NICK', r"(.*)")
+
+    def logInvite(m, origin, args, text, c=c):
+        c.todo([JOIN, text])
+    c.bind(logInvite, 'INVITE', r"(.*)")
+
+    # inits
+    if not os.access(_logsdir, os.W_OK):
+        os.makedirs(_logsdir)
+    for entry in os.listdir(_logsdir):
+        if os.path.isdir(os.path.join(_logsdir, entry)):
+            lentry = entry.lower()
+            if lentry == entry:  # ignore non-lowercase dirs
+                if lentry not in directories:
+                    directories.append('#' + lentry)
+
+    c.makeConn(hostName, port)
+    try:
+        loop(c)
+    except:
+        exit_handler(signal.SIGHUP, 0)
+
 
 signal.signal(signal.SIGTERM, exit_handler)
 signal.signal(signal.SIGINT, exit_handler)
 
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
-if __name__=='__main__':
-   if len(sys.argv) > 4:
-      server, NickName, _logsdir, _url, chans = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
+if __name__ == '__main__':
+    if len(sys.argv) > 4:
+        server, NickName, _logsdir, _url, chans = sys.argv[
+            1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
 
-      if server == '.': server = 'localhost'
-      if NickName == '.': NickName = NickNameDef
-      if _logsdir == '.': _logsdir = _logsdirDef
-      if _url == '.': _url = _urlDef
+        if server == '.':
+            server = 'localhost'
+        if NickName == '.':
+            NickName = NickNameDef
+        if _logsdir == '.':
+            _logsdir = _logsdirDef
+        if _url == '.':
+            _url = _urlDef
 
-      chans = [('#%s' % c, c)[c.startswith('#')] for c in chans]
-      if ':' in server: server, port = server.split(':')
-      else: port = '6667'
+        chans = [('#%s' % c, c)[c.startswith('#')] for c in chans]
+        if ':' in server:
+            server, port = server.split(':')
+        else:
+            port = '6667'
 
-      # NickNameQ is the re-quoted form of NickName for comparisons
-      NickNameQ = re.sub("([][*+])", '[\\1]', NickName)
-      nicknameRe = re.compile(NickNameQ, re.I)
-      commandRe = re.compile(NickNameQ + '[,:]? *(.*)', re.I)
-      main(server, int(port), chans)
-   else: print(sys.argv); print(_doc)
-
+        # NickNameQ is the re-quoted form of NickName for comparisons
+        NickNameQ = re.sub("([][*+])", '[\\1]', NickName)
+        nicknameRe = re.compile(NickNameQ, re.I)
+        commandRe = re.compile(NickNameQ + '[,:]? *(.*)', re.I)
+        main(server, int(port), chans)
+    else:
+        print(sys.argv)
+        print(_doc)

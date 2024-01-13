@@ -21,39 +21,41 @@ $Id: ircAsyncD.py,v 1.9 2003/09/13 colas Exp $
 # asyncore -- Asynchronous socket handler
 # http://www.python.org/doc/current/lib/module-asyncore.html
 
-import string, re
+import string
+import re
 import socket
-import asyncore, asynchat
+import asyncore
+import asynchat
 import os
 
 
-
-#RFC 2811: Internet Relay Chat: Client Protocol
-#2.3 Messages
+# RFC 2811: Internet Relay Chat: Client Protocol
+# 2.3 Messages
 # http://www.valinor.sorcery.net/docs/rfc2812/2.3-messages.html
-SPC="\x20"
-CR="\x0d"
-LF="\x0a"
-CRLF=CR+LF
+SPC = "\x20"
+CR = "\x0d"
+LF = "\x0a"
+CRLF = CR+LF
 Port = 6667
 
 # commands...
 PRIVMSG = 'PRIVMSG'
 NOTICE = 'NOTICE'
-PING='PING'
-PONG='PONG'
-USER='USER'
-NICK='NICK'
-PASS='PASS'
-JOIN='JOIN'
-PART='PART'
-INVITE='INVITE'
-QUIT='QUIT'
+PING = 'PING'
+PONG = 'PONG'
+USER = 'USER'
+NICK = 'NICK'
+PASS = 'PASS'
+JOIN = 'JOIN'
+PART = 'PART'
+INVITE = 'INVITE'
+QUIT = 'QUIT'
 
 # reply codes...
-RPL_WELCOME='001'
-TOPIC='332'
-TOPICINFO='333'
+RPL_WELCOME = '001'
+TOPIC = '332'
+TOPICINFO = '333'
+
 
 class T(asynchat.async_chat):
     def __init__(self):
@@ -68,7 +70,8 @@ class T(asynchat.async_chat):
         # If your mail address were foo@bar.com, your username would be foo.
         # other limitations? @@see IRC RFC?"""
 
-        self.nick = 'ircAsyncD' # manage this with __getattr__() in stead? hmm...
+        # manage this with __getattr__() in stead? hmm...
+        self.nick = 'ircAsyncD'
         self.userid = 'nobody'
         self.fullName = 'ircAsyncD user'
         self._startChannels = ['#test']
@@ -85,7 +88,8 @@ class T(asynchat.async_chat):
 
     def todo(self, args, *text):
         command = " ".join(args)
-        if text: command = command + ' :' + " ".join(text)
+        if text:
+            command = command + ' :' + " ".join(text)
 
         command += CRLF
         self.push(command.encode('utf-8'))
@@ -96,13 +100,14 @@ class T(asynchat.async_chat):
     def handle_connect(self):
         debug("connected")
 
-        #@@ hmm... RFC says mode is a bitfield, but
+        # @@ hmm... RFC says mode is a bitfield, but
         # irc.py by @@whathisname says +iw string.
         if self.passwd:
             self.todo([PASS, self.passwd])
         self.todo([NICK, self.nick])
         self.todo([USER, self.userid, "+iw", self.nick], self.fullName)
-    def handle_close (self):
+
+    def handle_close(self):
         debug('socket closed')
         self.close()
 
@@ -111,7 +116,7 @@ class T(asynchat.async_chat):
         self.bufIn = self.bufIn + bytes.decode('utf-8')
 
     def found_terminator(self):
-        #debug("found terminator", self.bufIn)
+        # debug("found terminator", self.bufIn)
         line = self.bufIn
         self.bufIn = ''
 
@@ -141,11 +146,13 @@ class T(asynchat.async_chat):
 
         doc should be a list of strings; each will go on its own line"""
 
-        if type(textPat) is type(""): textPat = re.compile(textPat)
+        if type(textPat) is type(""):
+            textPat = re.compile(textPat)
 
         self._dispatch.append((command, textPat, thunk))
 
-        if doc: self._doc = self._doc + doc
+        if doc:
+            self._doc = self._doc + doc
 
     def rxdMsg(self, args, text, origin):
         debug('rxdMsg ', args)
@@ -178,16 +185,19 @@ class T(asynchat.async_chat):
         """send a NOTICE to dest, a channel or user"""
         self.todo([NOTICE, dest], text)
 
+
 def actionFmt(str):
     return "\001ACTION" + str + "\001"
 
+
 def replyTo(myNick, origin, args):
     target = args[1]
-    if target == myNick: # just to me
+    if target == myNick:  # just to me
         nick, user, host = splitOrigin(origin)
         return nick
     else:
         return target
+
 
 def splitOrigin(origin):
     if origin and '!' in origin:
@@ -205,18 +215,28 @@ def splitOrigin(origin):
 # http://www.mozilla.org/projects/rt-messaging/chatzilla/irc-urls.html
 # Tue, 20 Mar 2001 21:28:14 GMT
 
+
 def serverAddr(host, port):
-    if port == Port: portPart = ''
-    else: portPart = ":%s" % port
+    if port == Port:
+        portPart = ''
+    else:
+        portPart = ":%s" % port
     return "irc://%s%s/" % (host, portPart)
 
+
 def chanAddr(host, port, chan):
-    if port == Port: portPart = ''
-    else: portPart = ":%s" % port
-    if chan[0] == '&': chanPart = '%26' + chan[1:]
-    elif chan[0] == '#': chanPart = chan[1:]
-    else: raise ValueError # dunno what to do with this channel name
+    if port == Port:
+        portPart = ''
+    else:
+        portPart = ":%s" % port
+    if chan[0] == '&':
+        chanPart = '%26' + chan[1:]
+    elif chan[0] == '#':
+        chanPart = chan[1:]
+    else:
+        raise ValueError  # dunno what to do with this channel name
     return "irc://%s%s/%s" % (host, portPart, chanPart)
+
 
 def debug(*args):
     import sys
@@ -242,43 +262,43 @@ def test(hostName, port, chan):
     asyncore.loop()
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     test('irc.w3.org', 6665, '#rdfbot')
-    #test('irc.openprojects.net', Port, '#rdfig')
+    # test('irc.openprojects.net', Port, '#rdfig')
 
 
-#$Log: ircAsyncD.py,v $
-#Revision 1.9 2003/09/13 10:13:28 colas
-#removed debug statements, raises EOF on connection close
+# $Log: ircAsyncD.py,v $
+# Revision 1.9 2003/09/13 10:13:28 colas
+# removed debug statements, raises EOF on connection close
 #
-#Revision 1.8  2001/08/24 05:50:52  connolly
-#replaced onPrivMsg, onInvite etc. by bind. introduced LOTS of bugs, but I think I fixed most of them. added some documentation, which doubles as test material.
+# Revision 1.8  2001/08/24 05:50:52  connolly
+# replaced onPrivMsg, onInvite etc. by bind. introduced LOTS of bugs, but I think I fixed most of them. added some documentation, which doubles as test material.
 #
-#Revision 1.7  2001/08/21 23:03:50  connolly
-#general clean-up and tidying... thinking
-#about base URIs and contexts.
+# Revision 1.7  2001/08/21 23:03:50  connolly
+# general clean-up and tidying... thinking
+# about base URIs and contexts.
 #
-#Revision 1.6  2001/08/21 20:34:12  connolly
-#integrated Aaron's patches for join/part.
-#holding off on his default prefix patch
-#to think about contexts some more.
+# Revision 1.6  2001/08/21 20:34:12  connolly
+# integrated Aaron's patches for join/part.
+# holding off on his default prefix patch
+# to think about contexts some more.
 #
-#Revision 1.5  2001/08/20 14:04:56  connolly
-#got rid of dead code.
+# Revision 1.5  2001/08/20 14:04:56  connolly
+# got rid of dead code.
 #
-#Revision 1.4  2001/08/20 07:39:21  connolly
-#questions work now.
-#syntax errors are reported.
-#irc login protocol revised. (fixed?)
+# Revision 1.4  2001/08/20 07:39:21  connolly
+# questions work now.
+# syntax errors are reported.
+# irc login protocol revised. (fixed?)
 #
-#Revision 1.3  2001/08/20 06:16:00  connolly
-#woohoo! it's working...
-#it accepts RDF/n3 via IRC and stores it in a cwm KB.
+# Revision 1.3  2001/08/20 06:16:00  connolly
+# woohoo! it's working...
+# it accepts RDF/n3 via IRC and stores it in a cwm KB.
 #
-#Revision 1.2  2001/08/20 04:49:45  connolly
-#rdfn3chat has one feature: replies to "help" messages
-#with UTSL pointer
+# Revision 1.2  2001/08/20 04:49:45  connolly
+# rdfn3chat has one feature: replies to "help" messages
+# with UTSL pointer
 #
-#Revision 1.1  2001/08/20 03:58:38  connolly
-#connects, reponds to PINGs with PONGs.
+# Revision 1.1  2001/08/20 03:58:38  connolly
+# connects, reponds to PINGs with PONGs.
 #
