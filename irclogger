@@ -73,6 +73,10 @@ from ircAsync import PRIVMSG, NOTICE, PING, PONG, USER
 from ircAsync import NICK, JOIN, PART, INVITE, QUIT
 from ircAsync import SPC, CR, LF, CRLF, RPL_WELCOME
 
+# For now, ignore FutureWarning
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 def ctcp(s): return '\x01%s\x01' % s
 def me(s): return ctcp('ACTION %s' % s)
 
