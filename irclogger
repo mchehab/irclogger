@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/env python3
 VERSION = """IRC Logger python bot v1.17, http://colas.nahaboo.net/Software/IrcLogger"""
 # irclogger server nickname logsdir url [start_channels...]
 #           if args are "." they are replaced by default values
