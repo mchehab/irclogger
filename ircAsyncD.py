@@ -18,7 +18,7 @@ http://www.w3.org/Consortium/Legal/copyright-software-19980720
 $Id: ircAsyncD.py,v 1.9 2003/09/13 colas Exp $
 """
 
-# asyncore -- Asynchronous socket handler 
+# asyncore -- Asynchronous socket handler
 # http://www.python.org/doc/current/lib/module-asyncore.html
 
 import string, re
@@ -74,7 +74,7 @@ class T(asynchat.async_chat):
         self._startChannels = ['#test']
         self._dispatch = []
         self._doc = []
-        
+
     def makeConn(self, host, port):
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         debug("connecting to...", host, port)
@@ -133,10 +133,10 @@ class T(asynchat.async_chat):
         """
         thunk is the routine to bind; it's called ala
           thunk(matchObj or None, origin, args, text)
-        
+
         command is one of the commands above, e.g. PRIVMSG
         textpat is None or a regex object or string to compile to one
-        
+
         doc should be a list of strings; each will go on its own line"""
 
         if type(textPat) is type(""): textPat = re.compile(textPat)
@@ -163,7 +163,7 @@ class T(asynchat.async_chat):
     def startChannels(self, chans):
         self._startChannels = chans
         self.bind(self._welcomeJoin, RPL_WELCOME)
-                  
+
     def _welcomeJoin(self, m, origin, args, text):
         for chan in self._startChannels:
             self.todo(['JOIN', chan])
@@ -207,7 +207,7 @@ def serverAddr(host, port):
     if port == Port: portPart = ''
     else: portPart = ":%s" % port
     return "irc://%s%s/" % (host, portPart)
-        
+
 def chanAddr(host, port, chan):
     if port == Port: portPart = ''
     else: portPart = ":%s" % port
@@ -215,7 +215,7 @@ def chanAddr(host, port, chan):
     elif chan[0] == '#': chanPart = chan[1:]
     else: raise ValueError # dunno what to do with this channel name
     return "irc://%s%s/%s" % (host, portPart, chanPart)
-        
+
 def debug(*args):
     import sys
     sys.stderr.write("DEBUG: ")
@@ -238,13 +238,13 @@ def test(hostName, port, chan):
 
     c.makeConn(hostName, port)
     asyncore.loop()
-    
-    
+
+
 if __name__=='__main__':
     test('irc.w3.org', 6665, '#rdfbot')
     #test('irc.openprojects.net', Port, '#rdfig')
 
-        
+
 #$Log: ircAsyncD.py,v $
 #Revision 1.9 2003/09/13 10:13:28 colas
 #removed debug statements, raises EOF on connection close

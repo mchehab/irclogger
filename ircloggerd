@@ -60,7 +60,7 @@ _pingDelay = 60
 _loopDelay = 30.0
 
 # End of main config stuff
-#============================================================================= 
+#=============================================================================
 
 
 import ircAsyncD
@@ -86,22 +86,22 @@ directories = []
 
 offRe = re.compile(" *(off|quit|stop|exit)", re.I)
 onRe = re.compile(" *(log|go|on|start) +((#?[^ ]+)( *([^ ]+))?)", re.I)
-offPrefix = re.compile("^[^ ]+ [[]off[]]", re.I) 
+offPrefix = re.compile("^[^ ]+ [[]off[]]", re.I)
 
 #-----------------------------------------------------------------------------
 
-def log(channelname, text): 
+def log(channelname, text):
    fn = time.strftime(_logfilename, time.gmtime(time.time()))
    # some bogus server messages may end with bot name as channel, ignore
    if channelname == NickName:
       return
    # channels are #-prefixed, but we store in dirs without the prefix
    channel = channelname.lower()
-   if channel not in directories: 
+   if channel not in directories:
       # if it fails, the exception may as well be raised
       os.mkdir(os.path.join(_logsdir, channel[1:]))
       directories.append(channel)
-   if TimeStamp: 
+   if TimeStamp:
       t = time.strftime('[%H:%M]', time.gmtime(time.time()))
       text = t + ' ' + text
    text += '\n'
@@ -142,7 +142,7 @@ def interpretMsg(m, origin, args, text, c):
       help = help.replace('LOGSURL', _url)
       for line in help.split('\n'):
          c.todo([PRIVMSG, origin, ":", line])
-         
+
 def logOnMsg(channel, c):
    on = _on % (channel, _url)
    on = on.replace('LOGGER', NickName)
@@ -177,7 +177,7 @@ def loop (c):
 
 def exit_handler(signal, frame):
     t = time.strftime('%a %b %d %H:%M:%S %Y', time.gmtime(time.time()))
-    for channel in channels: 
+    for channel in channels:
        log(channel, _session % (NickName, 'stops', channel, t))
     sys.exit(0)
 
@@ -192,14 +192,14 @@ def main(hostName, port, chan):
    c.nick = NickName
    c.userid = 'logger'
    c.lastTickTime = time.time()
-   
+
    # Put any new functions here
 
-   def hi(m, origin, args, text, c=c): 
+   def hi(m, origin, args, text, c=c):
       c.tell(args[1], 'hi, %s' % origin.split('!')[0])
    c.bind(hi, PRIVMSG, r"(?i)^(Hi|Hey|welcome)(,)? %s(\!)?$" % NickName)
 
-   def logText(m, origin, args, text, c=c): 
+   def logText(m, origin, args, text, c=c):
       channel = args[1]
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
@@ -209,16 +209,16 @@ def main(hostName, port, chan):
       else:
          mo = re.match(commandRe, text)
          if mo: channelCommand(channel, mo.group(1), c)
-      if not (text.startswith('\x01ACTION ') and text.endswith('\x01')): 
+      if not (text.startswith('\x01ACTION ') and text.endswith('\x01')):
          text = _text % (nick, text)
       else: text = _action % (nick, text[8:-1])
-      try: 
+      try:
          if not re.match(offPrefix, text):
             log(channel, text)
       except ValueError: log(channel, text)
    c.bind(logText, PRIVMSG, r"(.*)")
 
-   def logTopic(m, origin, args, text, c=c): 
+   def logTopic(m, origin, args, text, c=c):
       channel = args[1]
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
@@ -226,7 +226,7 @@ def main(hostName, port, chan):
       log(channel, topic)
    c.bind(logTopic, 'TOPIC', r"(.*)")
 
-   def logMode(m, origin, args, text, c=c): 
+   def logMode(m, origin, args, text, c=c):
       channel = args[1]
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
@@ -234,12 +234,12 @@ def main(hostName, port, chan):
       log(channel, mode)
    c.bind(logMode, 'MODE', r"(.*)")
 
-   def logJoin(m, origin, args, text, c=c): 
+   def logJoin(m, origin, args, text, c=c):
       channel = text
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
 
-      if nick == NickName: 
+      if nick == NickName:
          if channel not in channels:
             if allowedChannel(channel):
                channels.append(channel)
@@ -250,25 +250,25 @@ def main(hostName, port, chan):
 
       join = _join % (nick, channel)
       log(channel, join)
-      if nick in people: 
-         if channel not in people[nick]: 
+      if nick in people:
+         if channel not in people[nick]:
             people[nick].append(channel)
       else: people[nick] = [channel]
    c.bind(logJoin, 'JOIN', r"(.*)")
 
-   def logNames(m, origin, args, text, c=c): 
+   def logNames(m, origin, args, text, c=c):
       channel = args[3]
       raw_nicks = text.split(' ')
-      for nick in raw_nicks: 
-         if nick.startswith('@') or nick.startswith('+'): 
+      for nick in raw_nicks:
+         if nick.startswith('@') or nick.startswith('+'):
             nick = nick[1:]
-         if nick in people: 
-            if channel not in people[nick]: 
+         if nick in people:
+            if channel not in people[nick]:
                people[nick].append(channel)
          else: people[nick] = [channel]
    c.bind(logNames, '353', r"(.*)")
 
-   def logPart(m, origin, args, text, c=c): 
+   def logPart(m, origin, args, text, c=c):
       if len(args) > 1:
         channel = args[1]
       else:
@@ -277,52 +277,52 @@ def main(hostName, port, chan):
       if '!' in origin: nick = origin.split('!')[0]
       part = _part % (nick, text)
       log(channel, part)
-      if nick == NickName: 
+      if nick == NickName:
          if channel in channels:
             channels.remove(channel)
             logChannels()
       try: people[nick].remove(channel)
-      except: 
+      except:
          print("Something messed up, but it doesn't matter, for ", nick, " parting from ", channel, file=sys.stderr)
    c.bind(logPart, 'PART', r"(.*)")
 
-   def logQuit(m, origin, args, text, c=c): 
+   def logQuit(m, origin, args, text, c=c):
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
       quit = _quit % (nick, text)
-      if nick in people: 
+      if nick in people:
          for channel in people[nick]: log(channel, quit)
          del people[nick]
    c.bind(logQuit, 'QUIT', r"(.*)")
 
-   def logKick(m, origin, args, text, c=c): 
+   def logKick(m, origin, args, text, c=c):
       channel = args[1]
       nick = origin
       if '!' in origin: nick = origin.split('!')[0]
       kickee = args[2]
       kick = _kick % (kickee, nick, text)
       log(channel, kick)
-      if kickee == NickName: 
+      if kickee == NickName:
          if channel in channels:
             channels.remove(channel)
             logChannels()
       try: people[kickee].remove(channel)
-      except: 
+      except:
          print("Something messed up, but it doesn't matter, for ", kickee, " kicked from ", channel, file=sys.stderr)
    c.bind(logKick, 'KICK', r"(.*)")
 
-   def logNick(m, origin, args, text, c=c): 
+   def logNick(m, origin, args, text, c=c):
       old = origin
       if '!' in origin: old = origin.split('!')[0]
       new = text
       nick = _nick % (old, new)
-      if old in people: 
+      if old in people:
          for channel in people[old]: log(channel, nick)
          people[new] = people[old]
          del people[old]
    c.bind(logNick, 'NICK', r"(.*)")
 
-   def logInvite(m, origin, args, text, c=c): 
+   def logInvite(m, origin, args, text, c=c):
       c.todo([JOIN, text])
    c.bind(logInvite, 'INVITE', r"(.*)")
 
@@ -344,16 +344,16 @@ signal.signal(signal.SIGTERM, exit_handler)
 signal.signal(signal.SIGINT, exit_handler)
 
 #-----------------------------------------------------------------------------
-    
-if __name__=='__main__': 
-   if len(sys.argv) > 4: 
+
+if __name__=='__main__':
+   if len(sys.argv) > 4:
       server, NickName, _logsdir, _url, chans = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:]
 
       if server == '.': server = 'localhost'
       if NickName == '.': NickName = NickNameDef
       if _logsdir == '.': _logsdir = _logsdirDef
       if _url == '.': _url = _urlDef
-      
+
       chans = [('#%s' % c, c)[c.startswith('#')] for c in chans]
       if ':' in server: server, port = server.split(':')
       else: port = '6667'
