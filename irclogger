@@ -66,7 +66,7 @@ _loopDelay = 30.0
 import ircAsync
 from ircAsync import debug
 import signal
-import re, os, os.path, sys, base64, socket, urllib.request, urllib.parse, urllib.error, time, asyncore, string
+import re, os, os.path, sys, base64, socket, urllib.request, urllib.parse, urllib.error, time, asyncore
 from re import match
 
 from ircAsync import PRIVMSG, NOTICE, PING, PONG, USER
@@ -131,31 +131,33 @@ def allowedChannel(channel):
    return 0
 
 def globalsubstitute(input_string,from_string,to_string):
-   splitlist = string.splitfields(input_string,from_string)
-   return string.joinfields(splitlist,to_string)
+   splitlist = input_string.splitfields(from_string)
+   return splitlist.joinfields(to_string)
 
 def interpretMsg(m, origin, args, text, c):
    on = re.match(onRe, text)
    if on: # we are told to join a channel
-      help = string.replace(_logAck, 'LOGGER', NickName) % on.group(3)
+      help = _logAck.replace('LOGGER', NickName) % on.group(3)
       for line in help.split('\n'):
          c.todo([PRIVMSG, origin, ":", line])
       newchan = on.group(2)
       if re.match("[^#]", newchan): newchan = "#" + newchan
       c.todo([JOIN, newchan])
    else:
-      help = string.replace(_help, 'LOGGER', NickName)
-      help = string.replace(help, 'LOGSURL', _url)
+      help = _help.replace('LOGGER', NickName)
+      help = help.replace('LOGSURL', _url)
       for line in help.split('\n'):
          c.todo([PRIVMSG, origin, ":", line])
          
 def logOnMsg(channel, c):
-   on = string.replace(_on % (channel, _url), 'LOGGER', NickName)
+   on = _on % (channel, _url)
+   on = on.replace('LOGGER', NickName)
    for line in on.split('\n'):
       c.todo([PRIVMSG, channel, ":", line])
 
 def logOffMsg(channel, c):
-   off = string.replace(_off % (channel, _url), 'LOGGER', NickName)
+   off = _off % (channel, _url)
+   off = off.replace('LOGGER', NickName)
    for line in off.split('\n'):
       c.todo([PRIVMSG, channel, ":", line])
 

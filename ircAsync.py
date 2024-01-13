@@ -21,7 +21,7 @@ $Id: ircAsync.py,v 1.9 2003/09/13 colas Exp $
 # asyncore -- Asynchronous socket handler 
 # http://www.python.org/doc/current/lib/module-asyncore.html
 
-import string, re
+import re
 import socket
 import asyncore, asynchat
 import os
@@ -84,8 +84,8 @@ class T(asynchat.async_chat):
         self.bufIn = ''
 
     def todo(self, args, *text):
-        command = string.join(args)
-        if text: command = command + ' :' + string.join(text)
+        command = " ".join(args)
+        if text: command = command + ' :' + " ".join(text)
 
         self.push(command + CRLF)
         #debug("sent/pushed command:", command)
@@ -114,16 +114,16 @@ class T(asynchat.async_chat):
         self.bufIn = ''
 
         if line[0] == ':':
-            origin, line = string.split(line[1:], ' ', 1)
+            origin, line = line[1:].split(' ', 1)
         else:
             origin = None
 
         try:
-            args, text = string.split(line, ' :', 1)
+            args, text = line.split(' :', 1)
         except ValueError:
             args = line
             text = ''
-        args = string.split(args)
+        args = args.split(" ")
 
         #debug("from::", origin, "|message::", args, "|text::", text)
 
@@ -188,9 +188,9 @@ def replyTo(myNick, origin, args):
 
 def splitOrigin(origin):
     if origin and '!' in origin:
-        nick, userHost = string.split(origin, '!', 1)
+        nick, userHost = origin.split('!', 1)
         if '@' in userHost:
-            user, host = string.split(userHost, '@', 1)
+            user, host = userHost.split('@', 1)
         else:
             user, host = userHost, None
     else:
